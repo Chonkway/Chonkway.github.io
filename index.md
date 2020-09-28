@@ -5,5 +5,5 @@
 layout: home
 ---
 layout: page
-title: About
-permalink: /about/
+title: Data
+permalink: /data/
