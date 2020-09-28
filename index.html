@@ -1,77 +1,11 @@
-<!DOCTYPE html>
-<html>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="https://www.w3schools.com/w3css/3/w3.css">
-
-<!-- Sidebar Style-->
-<style>
-body {
-  font-family: "Lato", sans-serif;
-}
-
-.sidenav {
-  height: 100%;
-  width: 0;
-  position: fixed;
-  z-index: 1;
-  top: 0;
-  left: 0;
-  background-color: #111;
-  overflow-x: hidden;
-  transition: 0.5s;
-  padding-top: 60px;
-}
-
-.sidenav a {
-  padding: 8px 8px 8px 32px;
-  text-decoration: none;
-  font-size: 25px;
-  color: #818181;
-  display: block;
-  transition: 0.3s;
-}
-
-.sidenav a:hover {
-  color: #f1f1f1;
-}
-
-.sidenav .closebtn {
-  position: absolute;
-  top: 0;
-  right: 25px;
-  font-size: 36px;
-  margin-left: 50px;
-}
-
-@media screen and (max-height: 450px) {
-  .sidenav {padding-top: 15px;}
-  .sidenav a {font-size: 18px;}
-}
-</style>
-
-<!---Side Navigation Container-->
-<div id="mySidenav" class="sidenav">
-  <a href="javascript:void(0)" class="closebtn" onclick="closeNav()">&times;</a>
-  <a href="#" target="_self">About</a>
-  <a href="#" target="_self">Blog</a>
-  <a href="file:///C:/Users/penot/Desktop/PersonalProjects/HTML/files/Data.html" target="_self">Data</a>
-  <a href="#" target="_self">Projects</a>
-  <a href="#" target="_self">Useful Resources</a>
-</div>
-
-<!--Decalres script openNav and closeNav to run-->
-<script>
-function openNav() {
-  document.getElementById("mySidenav").style.width = "250px";
-}
-
-function closeNav() {
-  document.getElementById("mySidenav").style.width = "0";
-}
-</script>
-
-<span style="font-size:30px;cursor:pointer" onclick="openNav()">&#9776;</span>
-
-</body>
-</html> 
+---
+layout: blog
+title: Blog
+description: >
+  The official Hydejack blog. Version updates, example content and how-to guides on how to blog with Jekyll.
+last_modified_at: 2018-08-03
+no_link_title: false 
+no_excerpt: false 
+hide_image: false
+cover: true
+---
