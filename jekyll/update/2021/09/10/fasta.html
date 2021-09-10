@@ -64,38 +64,37 @@ Powered by Hydejack v9.0.4 <https://hydejack.com/>
                     <div class="hr pb0"></div>
                 </header>
                 <hr>
-                <p>I am writing this prior to this project for record keeping and to track my thoughts.</p>
-                <p>Using the AASequence tool on my github along with the biopython library I need to take input from a <code>.fasta</code> file, in this case <code>DRR128265.fasta</code></p>
-                <hr>
-                <p>First, we need to parse the file. In order to do this we use the SeqIO function in Biopython.</p>
-                <pre><code class="lang-python"><span class="hljs-keyword">from</span> Bio <span class="hljs-keyword">import</span> SeqIO 
-                
-                
-                <span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(<span class="hljs-string">"DRR128265.fasta"</span>, <span class="hljs-string">"fasta"</span>):
-                    <span class="hljs-built_in">print</span>(seq_record)
-                </code></pre>
-                <p>Unfortunately, for many full sized <code>.fasta</code> files there are tens of millions of lines to run through and holding that much information in memory just simply isn&#39;t realistic. The most reasonable approach would be to split one large file into several, smaller files for handling. For our file <code>DRR128265.fasta</code> we have a staggering ~92 million lines broken up into these sequence chunks. </p>
-                <pre><code>&gt;DRR128265<span class="hljs-number">.1</span> <span class="hljs-number">1</span> length=<span class="hljs-number">301</span>
-                CTTTCATCGTTTACTCTGGCAAAATGAATTGTAACCCTCCATTCTCCTCCTTTAACTTAT
-                TTCTACTCAACTTTTTCTTCCCTTCTTCCTCCTTTTTCACATTTTTATTCTCCCCTCTCA
-                TCCTCTCCACTTCCTTTTTCTTATCCTACTTCTTTCTAACTCTCATCTTCTCCTTCTTTG
-                TTTTCTCAATTCTCTCCCCCCTCTTCAACACCTTCTTTCTTCCGTTTACCCCTTGTTTTT
-                CTTAAGTGCACTCTTCTTCTCTCCTTTCTCTTTTTCTTTTCTCTTTTTCCTTCTTCTTCT
-                T
-                </code></pre><p>I decided 512MB file sizes would be a reasonable split size, and while I could force users to use SRA Toolkit or other programs to split the <code>.fasta</code> files into those limits, it seemed nicer to just do it for them and let them toss in a full sizes file no matter the size. In order to do this, we will use the method described here <a href="https://biopython.org/wiki/Split_large_file">https://biopython.org/wiki/Split_large_file</a></p>
-                <pre><code class="lang-python">def batch_iterator(iterator, batch_size):...
-                
-                
-                record_iter = <span class="hljs-keyword">list</span>(SeqIO.<span class="hljs-keyword">parse</span>(<span class="hljs-keyword">open</span>(<span class="hljs-string">"DRR128265.fasta"</span>), <span class="hljs-string">"fasta"</span>))
-                <span class="hljs-keyword">for</span> i, batch <span class="hljs-keyword">in</span> enumerate(batch_iterator(record_iter, 10000)):
-                    filename = <span class="hljs-string">"group_%i.fasta"</span> % (i + 1)
-                    with <span class="hljs-keyword">open</span>(filename, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> handle:
-                        <span class="hljs-keyword">count</span> = SeqIO.write(batch, handle, <span class="hljs-string">"fasta"</span>)
-                    <span class="hljs-keyword">print</span>(<span class="hljs-string">"Wrote %i records to %s"</span> % (<span class="hljs-keyword">count</span>, filename))
-                </code></pre>
-                <p>I found that if you don&#39;t do <code>list(SeqIO.parse)</code> you run into an issue of python not being able to apply <code>.next()</code>. If you copy paste from the site it won&#39;t work, though maybe that was more of an issue of me tossing stuff together.</p>
-                
-                
+<p>I am writing this prior to this project for record keeping and to track my thoughts.</p>
+<p>Using the AASequence tool on my github along with the biopython library I need to take input from a <code>.fasta</code> file, in this case <code>DRR128265.fasta</code></p>
+<hr>
+<p>First, we need to parse the file. In order to do this we use the SeqIO function in Biopython.</p>
+<pre><code class="lang-python"><span class="hljs-keyword">from</span> Bio <span class="hljs-keyword">import</span> SeqIO 
+
+
+<span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(<span class="hljs-string">"DRR128265.fasta"</span>, <span class="hljs-string">"fasta"</span>):
+    <span class="hljs-built_in">print</span>(seq_record)
+</code></pre>
+<p>Unfortunately, for many full sized <code>.fasta</code> files there are tens of millions of lines to run through and holding that much information in memory just simply isn&#39;t realistic. The most reasonable approach would be to split one large file into several, smaller files for handling. For our file <code>DRR128265.fasta</code> we have a staggering ~92 million lines broken up into these sequence chunks. </p>
+<pre><code>&gt;DRR128265<span class="hljs-number">.1</span> <span class="hljs-number">1</span> length=<span class="hljs-number">301</span>
+CTTTCATCGTTTACTCTGGCAAAATGAATTGTAACCCTCCATTCTCCTCCTTTAACTTAT
+TTCTACTCAACTTTTTCTTCCCTTCTTCCTCCTTTTTCACATTTTTATTCTCCCCTCTCA
+TCCTCTCCACTTCCTTTTTCTTATCCTACTTCTTTCTAACTCTCATCTTCTCCTTCTTTG
+TTTTCTCAATTCTCTCCCCCCTCTTCAACACCTTCTTTCTTCCGTTTACCCCTTGTTTTT
+CTTAAGTGCACTCTTCTTCTCTCCTTTCTCTTTTTCTTTTCTCTTTTTCCTTCTTCTTCT
+T
+</code></pre><p>While I could force users to use SRA Toolkit or other programs to split the <code>.fasta</code> files into those limits while downloading, it seemed nicer to just do it for them and let them toss in a full sizes file no matter the size. This will also force a standard naming convention for the rest of the program to follow. In order to do this, we will use the method described here <a href="https://biopython.org/wiki/Split_large_file">https://biopython.org/wiki/Split_large_file</a></p>
+<pre><code class="lang-python">def batch_iterator(iterator, batch_size):...
+
+
+record_iter = SeqIO.<span class="hljs-keyword">parse</span>(<span class="hljs-keyword">open</span>(<span class="hljs-string">"DRR128265.fasta"</span>), <span class="hljs-string">"fasta"</span>)
+<span class="hljs-keyword">for</span> i, batch <span class="hljs-keyword">in</span> enumerate(batch_iterator(record_iter, 25000)):
+    filename = <span class="hljs-string">"group_%i.fasta"</span> % (i + 1)
+    with <span class="hljs-keyword">open</span>(filename, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> handle:
+        <span class="hljs-keyword">count</span> = SeqIO.write(batch, handle, <span class="hljs-string">"fasta"</span>)
+    <span class="hljs-keyword">print</span>(<span class="hljs-string">"Wrote %i records to %s"</span> % (<span class="hljs-keyword">count</span>, filename))
+</code></pre>
+<p>Copy pasting the code from the site didn&#39;t work for me, and I found after some trial and error that you can&#39;t do <code>iterator.next()</code> in the <code>batch_iterator</code> function. Instead, <code>next(iterator)</code> worked for me.</p>
+<p>I also found that for my 4GB file, doing a batch size of 1000 created like...7000 files so I changed it to 25,000 </p>
 
             </article>
             <hr class="dingbat related" /> </main>
