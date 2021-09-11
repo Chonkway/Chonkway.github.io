@@ -40,3 +40,28 @@ for i, batch in enumerate(batch_iterator(record_iter, 25000)):
 Copy pasting the code from the site didn't work for me, and I found after some trial and error that you can't do `iterator.next()` in the `batch_iterator` function. Instead, `next(iterator)` worked for me.
 
 I also found that for my 4GB file, doing a batch size of 1000 created like...7000 files so I changed it to 25,000 
+
+Now that we have a more managable ~300 files, we need to isolate the part we care about: the sequence.
+
+Since we have all these smaller `.fasta` files, we can more reasonably commit them to memory. My plan is to use SeqIO to parse each file, strip the sequence and append it to a list in a similar fashion to what we just did. I'll set a batch_size again to prevent the list from getting too large, write the list to a text file, and repeat until we have multiple text files. We will finally pass these text files through my program, sum each instances Nitrogen, Phosphorous and Carbon count and create a final log file of the results.
+
+```python
+ext = ('.fasta', '.fna', '.fnn', '.faa', '.frn' , '.fa')
+```
+FASAT files do not strictly come as `.fasta`, so I will use the `os` module to account for the common extension aliases.
+
+```python
+ext = ('.fasta', '.fna', '.fnn', '.faa', '.frn' , '.fa')
+for files in os.listdir():
+    if files.endswith(ext):
+        char = '>'
+        with open(files) as oldfile, open('tempfile.txt', "w") as newfile:
+            for line in oldfile:
+                if not any (char in line):
+                    newfile.write(line) 
+```
+
+The idea is that we scan the directory for any common FASTA file extensions. The headers of these files all start with that `>` character:
+> '>DRR128265.1 1 length=301
+
+So we look for any line that contains this character, ignore it and then create a newfile without it. This will give us files without any information we don't want to pass through our tool.
