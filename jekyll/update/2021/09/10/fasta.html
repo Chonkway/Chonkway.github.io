@@ -100,20 +100,48 @@ Powered by Hydejack v9.0.4 <https://hydejack.com/>
                 <pre><code class="lang-python"><span class="hljs-attr">ext</span> = (<span class="hljs-string">'.fasta'</span>, <span class="hljs-string">'.fna'</span>, <span class="hljs-string">'.fnn'</span>, <span class="hljs-string">'.faa'</span>, <span class="hljs-string">'.frn'</span> , <span class="hljs-string">'.fa'</span>)
                 </code></pre>
                 <p>FASAT files do not strictly come as <code>.fasta</code>, so I will use the <code>os</code> module to account for the common extension aliases.</p>
-                <pre><code class="lang-python">ext = (<span class="hljs-string">'.fasta'</span>, <span class="hljs-string">'.fna'</span>, <span class="hljs-string">'.fnn'</span>, <span class="hljs-string">'.faa'</span>, <span class="hljs-string">'.frn'</span> , <span class="hljs-string">'.fa'</span>)
-                <span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
-                    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext):
-                        <span class="hljs-keyword">char</span> = <span class="hljs-string">'&gt;'</span>
-                        <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>) <span class="hljs-keyword">as</span> oldfile, <span class="hljs-built_in">open</span>(<span class="hljs-string">'tempfile.txt'</span>, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> newfile:
-                            <span class="hljs-keyword">for</span> <span class="hljs-built_in">line</span> <span class="hljs-keyword">in</span> oldfile:
-                                <span class="hljs-keyword">if</span> <span class="hljs-keyword">not</span> <span class="hljs-keyword">any</span> (<span class="hljs-keyword">char</span> <span class="hljs-keyword">in</span> <span class="hljs-built_in">line</span>):
-                                    newfile.<span class="hljs-built_in">write</span>(<span class="hljs-built_in">line</span>)
-                </code></pre>
-                <p>The idea is that we scan the directory for any common FASTA file extensions. The headers of these files all start with that <code>&gt;</code> character:</p>
+                <p>~~The idea is that we scan the directory for any common FASTA file extensions. The headers of these files all start with that <code>&gt;</code> character:</p>
                 <blockquote>
                 <p>&#39;&gt;DRR128265.1 1 length=301</p>
                 </blockquote>
-                <p>So we look for any line that contains this character, ignore it and then create a newfile without it. This will give us files without any information we don&#39;t want to pass through our tool.</p>
+                <p><del>So we look for any line that contains this character, ignore it and then create a newfile without it. This will give us files without any information we don&#39;t want to pass through our tool. We add a check to ensure our original fasta file is untouched by the header stripping.</del></p>
+                <p>Originally, the code looked like this:</p>
+                <pre><code class="lang-python"><span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
+                    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext) <span class="hljs-keyword">and</span> <span class="hljs-built_in">files</span> != filename:
+                        <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>, <span class="hljs-string">"r+"</span>) <span class="hljs-keyword">as</span> oldfile, <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>, <span class="hljs-string">"r+"</span>) <span class="hljs-keyword">as</span> cleanfile:
+                            <span class="hljs-keyword">lines</span> = oldfile.readlines()
+                            <span class="hljs-keyword">for</span> <span class="hljs-built_in">line</span> <span class="hljs-keyword">in</span> <span class="hljs-keyword">lines</span>:
+                                <span class="hljs-keyword">if</span> <span class="hljs-string">'&gt;'</span> <span class="hljs-keyword">in</span> <span class="hljs-built_in">line</span>: 
+                                    pass
+                                <span class="hljs-keyword">else</span>:
+                                    cleanfile.<span class="hljs-built_in">write</span>(<span class="hljs-built_in">line</span>)
+                                    print(<span class="hljs-string">"Succesfully removed FASTA header from"</span> + <span class="hljs-string">""</span> + str(oldfile))
+                
+                    <span class="hljs-keyword">else</span>:
+                        pass
+                </code></pre>
+                <p>And this DOES work, but over the course of a huge file like an entire organism it would take way, way too long.</p>
+                <p>Instead, after a while of digging I found that the <code>SeqIO.parse()</code> returns a <code>SeqRecord</code> object and I can just take that object and call the sequence itself. Since I figure SeqIO is much more optimized than my loop, it should work much faster. This could certainly be used to remove the need for the second chunk of code but as of now I can&#39;t be bothered.</p>
+                <pre><code class="lang-python"><span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
+                    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext):  <span class="hljs-comment">#Ensures original FASTA is safe?</span>
+                        sequences = []
+                        ffile = <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>)
+                        <span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(ffile, <span class="hljs-string">"fasta"</span>):
+                            <span class="hljs-keyword">for</span> n <span class="hljs-keyword">in</span> seq_record:
+                                s = seq_record.seq
+                                sequences.append(SeqRecord(s, id=<span class="hljs-string">""</span>, description=<span class="hljs-string">""</span>))
+                            SeqIO.<span class="hljs-built_in">write</span>(sequences, <span class="hljs-string">"testfile.fasta"</span>, <span class="hljs-string">"fasta"</span>)
+                        print(<span class="hljs-string">"Stripped header from "</span> + str(<span class="hljs-built_in">files</span>))
+                    <span class="hljs-keyword">else</span>:
+                        pass
+                </code></pre>
+                <p>As of now, the main problems are as follows:</p>
+                <ul>
+                <li><p>I realized that there is nothing preventing the program from reading output files if they&#39;re fasta files, meaning it will indefinitely loop over the new files with their header stripped. This will result in duplicate strings and, more pressingly, an infinitely running program.</p>
+                </li>
+                <li><p>This still feels slow and I have a feeling that there are libraries that will do everything I want rendering my written &quot;library&quot; and this jumbled loop useless. But it&#39;s a learning experience. </p>
+                </li>
+                </ul>
                 
             </article>
             <hr class="dingbat related" /> </main>
