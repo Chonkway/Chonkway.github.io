@@ -48,7 +48,7 @@ Since we have all these smaller `.fasta` files, we can more reasonably commit th
 ```python
 ext = ('.fasta', '.fna', '.fnn', '.faa', '.frn' , '.fa')
 ```
-FASAT files do not strictly come as `.fasta`, so I will use the `os` module to account for the common extension aliases.
+FASTA files do not strictly come as `.fasta`, so I will use the `os` module to account for the common extension aliases.
 
 
 ~~The idea is that we scan the directory for any common FASTA file extensions. The headers of these files all start with that `>` character:
@@ -98,4 +98,52 @@ As of now, the main problems are as follows:
 
 * I realized that there is nothing preventing the program from reading output files if they're fasta files, meaning it will indefinitely loop over the new files with their header stripped. This will result in duplicate strings and, more pressingly, an infinitely running program.
 
-* This still feels slow and I have a feeling that there are libraries that will do everything I want rendering my written "library" and this jumbled loop useless. But it's a learning experience
+* This still feels slow and I have a feeling that there are libraries that will do everything I want rendering my written "library" and this jumbled loop useless. But it's a learning experience. 
+
+
+------------
+***UPDATE*** 
+
+I was right. I basically rendered all the above work useless lmao.
+
+This does it all, and it doesn't even need my AASequence code either.
+ 
+```python
+print("--------------")
+filename = input("Enter your filename (including extension). Ensure it is in the root directory.")
+finalseqcount = {'A': 0, 'C': 0, 'D': 0, 'E': 0, 'F': 0, 'G': 0, 'H': 0, 'I': 0, 'K': 0, 'L': 0, 'M': 0, 'N': 0, 'P': 0, 'Q': 0, 'R': 0, 'S': 0, 'T': 0, 'V': 0, 'W': 0, 'Y': 0}
+q = input("Is your sequence an mRNA sequence that needs translated? (y/n)") #Accounts for different sequence types (mRNA, DNA)
+for entry in SeqIO.parse(filename, "fasta"):
+    seqstring = Seq(entry.seq) #Grabs the sequence for each entry and turns it into a Seq object
+    if q.lower() == "y": 
+        seqstring = Seq(entry.seq).translate() #Translates mRNA to relevant protein sequence
+    else:
+        pass #Placeholder for other conversion types
+    analyzed_seq = ProteinAnalysis(str(seqstring))
+    aminoacids = analyzed_seq.count_amino_acids()
+    for key in finalseqcount:
+        if key in analyzed_seq.amino_acids_content:
+            finalseqcount[key] = finalseqcount[key] + analyzed_seq.amino_acids_content[key]
+```
+
+This part sets a dictionary of all 20 amino acids with a value of 0. We use `SeqIO` to parse the file and create a `Seq Object` of the sequence string. We add an option to use the `.translate()` function in Biopython just incase the fasta file the user is inputting is mRNA. We convert the sequence into a string so we can use `.count_amino_acids()` and `amino_acids_content()`.
+
+FInally, we update the amino acid value in the dictionary to get a final count of all the different acids present in the sequence.
+
+
+```python
+with open('AminoAcids.json') as json_file:
+    data = json.load(json_file)
+
+CCount = 0
+NCount = 0
+PCount = 0
+
+for i in finalseqcount.keys():
+    for key in data:
+        if i == key in data:
+            CCount = CCount + (finalseqcount[i]*data[key][0])
+            NCount = NCount + (finalseqcount[i]*data[key][2])
+            PCount = PCount + finalseqcount[i]
+```
+This part gives us the Carbon, Nitrogen and Phosphorous count of the sequence. By using the `json` module, we open the `AminoAcids.json` file that contains information on the structure of each amino acid. We check to make sure the key in both dictonaries are the same and then apply the relevant operations to update our final counts.
