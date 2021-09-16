@@ -147,3 +147,119 @@ for i in finalseqcount.keys():
             PCount = PCount + finalseqcount[i]
 ```
 This part gives us the Carbon, Nitrogen and Phosphorous count of the sequence. By using the `json` module, we open the `AminoAcids.json` file that contains information on the structure of each amino acid. We check to make sure the key in both dictonaries are the same and then apply the relevant operations to update our final counts.
+
+
+## Update (9-16-21)
+
+After some playing around, reading and time I have a program I'm happy enough with (as far as the bones go. I'm unsure of the accuracy and the speed needs reworking some day)
+
+
+```python
+#Reimpliement batch iteration -
+
+def batch_iterator(iterator, batch_size):
+    """
+    Returns multiple lists of length batch_size.
+    """
+
+    entry = True #Ensures the loop runs once
+    while entry:
+        batch = []
+        while len(batch) < batch_size: 
+            try:
+                entry = next(iterator)
+            except StopIteration:
+                entry = None
+            if entry is None:
+                break#End of file
+            batch.append(entry)
+        if batch:
+            yield batch
+
+print("--------------")
+filename = input("Enter your filename(including extension). Ensure it is in the root directory.") #Sets target file
+query = input("If the file is significantly large, it is recommended that you split it. Would you like to split the file?(y/n)")
+seqtype = input("Does your file need transcribed?(y/n)") #Used for a check below to use SeqIO's .translate() module
+
+if query.lower() == "y": #Checks if you want/need to split the file
+    record_iter = SeqIO.parse(open(filename), "fasta") #Uses SeqIO to parse the file as the iterator (subject to change to a different fasta parser)
+    for i, batch in enumerate(batch_iterator(record_iter, 60000)):
+        file = "group_%i.fasta" % (i + 1)
+        with open(file, "w") as handle:
+            count = SeqIO.write(batch, handle, "fasta")
+        print("Wrote %i records to %s" % (count, file))
+```
+
+I started by re-implementing the option to use the batch_iterator. This is only an option for those who want to do larger files on it, though I don't recomment it at this point in time. The batch size of `60000` was for a very, very large file and it took several hours.
+
+There is some flavor text for readability, and I have it handle whether the user needs their file translated or not all at the start.
+
+```python
+#Scan directory for common fasta file extensions using OS module -
+ext = ('.fasta', '.fna', '.fnn', '.faa', '.frn' , '.fa')
+
+PCount = 0 # Phosphorous count will be sum of sequence length pre-translation, creates variable.
+finalseqcount = {'A': 0, 'C': 0, 'D': 0, 'E': 0, 'F': 0, 'G': 0, 'H': 0, 'I': 0, 'K': 0, 'L': 0, 'M': 0, 'N': 0, 'P': 0, 'Q': 0, 'R': 0, 'S': 0, 'T': 0, 'V': 0, 'W': 0, 'Y': 0}
+
+#Loop over all files, count their Amino Acids and create a total - 
+print("Now parsing files. Depending on the number of files and their size, this may take a while...")
+if query == 'y':
+    for files in os.listdir(): #Scan for all files (applicable only if files are split)
+        if files.endswith(ext):
+            if files != filename:
+                fileparse = SeqIO.parse(files, "fasta") #Begins the file parse. Trying to keep this as the only parse step to avoid costly time
+else:
+    fileparse = SeqIO.parse(filename, "fasta") #If there's only one file used, no need to scan directory
+```
+
+This portion is mostly the same, though now we only scan the directory if the user decided to say `yes` to splitting the file. Otherwise, it loads the entire file into memory if they decided it was sufficiently small.
+
+```python
+for entry in fileparse: #Depending on if the file is large/a large series of a lot of smaller files, this can take a long time
+    PCount = PCount + len(str(entry.seq))
+
+    if seqtype.lower() == "y": # Check for mRNA
+        mRNA_translate = Seq(str(entry.seq)).translate()
+        analyzed_seq = ProteinAnalysis(str(mRNA_translate)) #Allows .count_amino_acids() to apply to the files
+
+    else:
+        analyzed_seq = ProteinAnalysis(str(entry.seq))
+
+    aacount = analyzed_seq.count_amino_acids()
+
+    for key in finalseqcount:
+        if key in analyzed_seq.amino_acids_content: #Dictionary content from .count_amino_acids()
+            finalseqcount[key] = finalseqcount[key] + analyzed_seq.amino_acids_content[key]
+
+    else:
+        pass
+
+print("Finished.")
+print("\n")
+
+print("Your final amino acid counts are: \n")
+print(finalseqcount)
+log = input("Would you like to write these to a log file?(y/n)")
+
+with open('AminoAcids.json') as json_file:
+    data = json.load(json_file)
+
+NCount = 0
+for i in finalseqcount.keys():
+    for key in data:
+        if i == key in data:
+            NCount = NCount + (finalseqcount[i]*data[key][2])
+            
+if log.lower() == "y":   
+    with open("results_'{}'.txt".format(filename), "x") as results: #Logs results because I'm sick of waiting for console
+        results.write("Amino acid count:\n")
+        results.write(str(finalseqcount))
+        results.write("\n")
+        results.write("Phosphorous count: \n")
+        results.write(str(PCount))
+        results.write("\n")
+        results.write("Nitrogen count: \n")
+        results.write(str(NCount))
+```
+
+Finally, the script generates a dictionary of the acid counts and then allows the user to write a `results.txt` logfile for their run if they want. It takes the name of `results_{filename}` for ease of keeping track. 

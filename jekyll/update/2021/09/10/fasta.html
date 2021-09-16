@@ -64,122 +64,224 @@ Powered by Hydejack v9.0.4 <https://hydejack.com/>
                     <div class="hr pb0"></div>
                 </header>
                 <hr>
-                <p>I am writing this prior to this project for record keeping and to track my thoughts.</p>
-                <p>Using the AASequence tool on my github along with the biopython library I need to take input from a <code>.fasta</code> file, in this case <code>DRR128265.fasta</code></p>
-                <hr>
-                <p>First, we need to parse the file. In order to do this we use the SeqIO function in Biopython.</p>
-                <pre><code class="lang-python"><span class="hljs-keyword">from</span> Bio <span class="hljs-keyword">import</span> SeqIO 
-                
-                
-                <span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(<span class="hljs-string">"DRR128265.fasta"</span>, <span class="hljs-string">"fasta"</span>):
-                    <span class="hljs-built_in">print</span>(seq_record)
-                </code></pre>
-                <p>Unfortunately, for many full sized <code>.fasta</code> files there are tens of millions of lines to run through and holding that much information in memory just simply isn&#39;t realistic. The most reasonable approach would be to split one large file into several, smaller files for handling. For our file <code>DRR128265.fasta</code> we have a staggering ~92 million lines broken up into these sequence chunks. </p>
-                <pre><code>&gt;DRR128265<span class="hljs-number">.1</span> <span class="hljs-number">1</span> length=<span class="hljs-number">301</span>
-                CTTTCATCGTTTACTCTGGCAAAATGAATTGTAACCCTCCATTCTCCTCCTTTAACTTAT
-                TTCTACTCAACTTTTTCTTCCCTTCTTCCTCCTTTTTCACATTTTTATTCTCCCCTCTCA
-                TCCTCTCCACTTCCTTTTTCTTATCCTACTTCTTTCTAACTCTCATCTTCTCCTTCTTTG
-                TTTTCTCAATTCTCTCCCCCCTCTTCAACACCTTCTTTCTTCCGTTTACCCCTTGTTTTT
-                CTTAAGTGCACTCTTCTTCTCTCCTTTCTCTTTTTCTTTTCTCTTTTTCCTTCTTCTTCT
-                T
-                </code></pre><p>While I could force users to use SRA Toolkit or other programs to split the <code>.fasta</code> files into those limits while downloading, it seemed nicer to just do it for them and let them toss in a full sizes file no matter the size. This will also force a standard naming convention for the rest of the program to follow. In order to do this, we will use the method described here <a href="https://biopython.org/wiki/Split_large_file">https://biopython.org/wiki/Split_large_file</a></p>
-                <pre><code class="lang-python">def batch_iterator(iterator, batch_size):...
-                
-                
-                record_iter = SeqIO.<span class="hljs-keyword">parse</span>(<span class="hljs-keyword">open</span>(<span class="hljs-string">"DRR128265.fasta"</span>), <span class="hljs-string">"fasta"</span>)
-                <span class="hljs-keyword">for</span> i, batch <span class="hljs-keyword">in</span> enumerate(batch_iterator(record_iter, 25000)):
-                    filename = <span class="hljs-string">"group_%i.fasta"</span> % (i + 1)
-                    with <span class="hljs-keyword">open</span>(filename, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> handle:
-                        <span class="hljs-keyword">count</span> = SeqIO.write(batch, handle, <span class="hljs-string">"fasta"</span>)
-                    <span class="hljs-keyword">print</span>(<span class="hljs-string">"Wrote %i records to %s"</span> % (<span class="hljs-keyword">count</span>, filename))
-                </code></pre>
-                <p>Copy pasting the code from the site didn&#39;t work for me, and I found after some trial and error that you can&#39;t do <code>iterator.next()</code> in the <code>batch_iterator</code> function. Instead, <code>next(iterator)</code> worked for me.</p>
-                <p>I also found that for my 4GB file, doing a batch size of 1000 created like...7000 files so I changed it to 25,000 </p>
-                <p>Now that we have a more managable ~300 files, we need to isolate the part we care about: the sequence.</p>
-                <p>Since we have all these smaller <code>.fasta</code> files, we can more reasonably commit them to memory. My plan is to use SeqIO to parse each file, strip the sequence and append it to a list in a similar fashion to what we just did. I&#39;ll set a batch_size again to prevent the list from getting too large, write the list to a text file, and repeat until we have multiple text files. We will finally pass these text files through my program, sum each instances Nitrogen, Phosphorous and Carbon count and create a final log file of the results.</p>
-                <pre><code class="lang-python"><span class="hljs-attr">ext</span> = (<span class="hljs-string">'.fasta'</span>, <span class="hljs-string">'.fna'</span>, <span class="hljs-string">'.fnn'</span>, <span class="hljs-string">'.faa'</span>, <span class="hljs-string">'.frn'</span> , <span class="hljs-string">'.fa'</span>)
-                </code></pre>
-                <p>FASTA files do not strictly come as <code>.fasta</code>, so I will use the <code>os</code> module to account for the common extension aliases.</p>
-                <p>~~The idea is that we scan the directory for any common FASTA file extensions. The headers of these files all start with that <code>&gt;</code> character:</p>
-                <blockquote>
-                <p>&#39;&gt;DRR128265.1 1 length=301</p>
-                </blockquote>
-                <p><del>So we look for any line that contains this character, ignore it and then create a newfile without it. This will give us files without any information we don&#39;t want to pass through our tool. We add a check to ensure our original fasta file is untouched by the header stripping.</del></p>
-                <p>Originally, the code looked like this:</p>
-                <pre><code class="lang-python"><span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
-                    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext) <span class="hljs-keyword">and</span> <span class="hljs-built_in">files</span> != filename:
-                        <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>, <span class="hljs-string">"r+"</span>) <span class="hljs-keyword">as</span> oldfile, <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>, <span class="hljs-string">"r+"</span>) <span class="hljs-keyword">as</span> cleanfile:
-                            <span class="hljs-keyword">lines</span> = oldfile.readlines()
-                            <span class="hljs-keyword">for</span> <span class="hljs-built_in">line</span> <span class="hljs-keyword">in</span> <span class="hljs-keyword">lines</span>:
-                                <span class="hljs-keyword">if</span> <span class="hljs-string">'&gt;'</span> <span class="hljs-keyword">in</span> <span class="hljs-built_in">line</span>: 
-                                    pass
-                                <span class="hljs-keyword">else</span>:
-                                    cleanfile.<span class="hljs-built_in">write</span>(<span class="hljs-built_in">line</span>)
-                                    print(<span class="hljs-string">"Succesfully removed FASTA header from"</span> + <span class="hljs-string">""</span> + str(oldfile))
-                
-                    <span class="hljs-keyword">else</span>:
-                        pass
-                </code></pre>
-                <p>And this DOES work, but over the course of a huge file like an entire organism it would take way, way too long.</p>
-                <p>Instead, after a while of digging I found that the <code>SeqIO.parse()</code> returns a <code>SeqRecord</code> object and I can just take that object and call the sequence itself. Since I figure SeqIO is much more optimized than my loop, it should work much faster. This could certainly be used to remove the need for the second chunk of code but as of now I can&#39;t be bothered.</p>
-                <pre><code class="lang-python"><span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
-                    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext):  <span class="hljs-comment">#Ensures original FASTA is safe?</span>
-                        sequences = []
-                        ffile = <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>)
-                        <span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(ffile, <span class="hljs-string">"fasta"</span>):
-                            <span class="hljs-keyword">for</span> n <span class="hljs-keyword">in</span> seq_record:
-                                s = seq_record.seq
-                                sequences.append(SeqRecord(s, id=<span class="hljs-string">""</span>, description=<span class="hljs-string">""</span>))
-                            SeqIO.<span class="hljs-built_in">write</span>(sequences, <span class="hljs-string">"testfile.fasta"</span>, <span class="hljs-string">"fasta"</span>)
-                        print(<span class="hljs-string">"Stripped header from "</span> + str(<span class="hljs-built_in">files</span>))
-                    <span class="hljs-keyword">else</span>:
-                        pass
-                </code></pre>
-                <p>As of now, the main problems are as follows:</p>
-                <ul>
-                <li><p>I realized that there is nothing preventing the program from reading output files if they&#39;re fasta files, meaning it will indefinitely loop over the new files with their header stripped. This will result in duplicate strings and, more pressingly, an infinitely running program.</p>
-                </li>
-                <li><p>This still feels slow and I have a feeling that there are libraries that will do everything I want rendering my written &quot;library&quot; and this jumbled loop useless. But it&#39;s a learning experience. </p>
-                </li>
-                </ul>
-                <hr>
-                <p><strong><em>UPDATE</em></strong> </p>
-                <p>I was right. I basically rendered all the above work useless lmao.</p>
-                <p>This does it all, and it doesn&#39;t even need my AASequence code either.</p>
-                <pre><code class="lang-python"><span class="hljs-function"><span class="hljs-title">print</span><span class="hljs-params">(<span class="hljs-string">"--------------"</span>)</span></span>
-                filename = input(<span class="hljs-string">"Enter your filename (including extension). Ensure it is in the root directory."</span>)
-                finalseqcount = {<span class="hljs-string">'A'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'C'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'D'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'E'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'F'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'G'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'H'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'I'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'K'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'L'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'M'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'N'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'P'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'Q'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'R'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'S'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'T'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'V'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'W'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'Y'</span>: <span class="hljs-number">0</span>}
-                <span class="hljs-selector-tag">q</span> = input(<span class="hljs-string">"Is your sequence an mRNA sequence that needs translated? (y/n)"</span>) <span class="hljs-number">#Acc</span>ounts <span class="hljs-keyword">for</span> different sequence types (mRNA, DNA)
-                <span class="hljs-keyword">for</span> entry <span class="hljs-keyword">in</span> SeqIO.parse(filename, <span class="hljs-string">"fasta"</span>):
-                    seqstring = Seq(entry.seq) <span class="hljs-selector-id">#Grabs</span> the sequence <span class="hljs-keyword">for</span> each entry and turns it into <span class="hljs-selector-tag">a</span> Seq <span class="hljs-selector-tag">object</span>
-                    <span class="hljs-keyword">if</span> <span class="hljs-selector-tag">q</span>.lower() == <span class="hljs-string">"y"</span>: 
-                        seqstring = Seq(entry.seq).translate() <span class="hljs-selector-id">#Translates</span> mRNA to relevant protein sequence
-                    <span class="hljs-keyword">else</span>:
-                        pass <span class="hljs-selector-id">#Placeholder</span> <span class="hljs-keyword">for</span> other conversion types
-                    analyzed_seq = ProteinAnalysis(str(seqstring))
-                    aminoacids = analyzed_seq.count_amino_acids()
-                    <span class="hljs-keyword">for</span> key <span class="hljs-keyword">in</span> finalseqcount:
-                        <span class="hljs-keyword">if</span> key <span class="hljs-keyword">in</span> analyzed_seq<span class="hljs-selector-class">.amino_acids_content</span>:
-                            finalseqcount[key] = finalseqcount[key] + analyzed_seq<span class="hljs-selector-class">.amino_acids_content</span>[key]
-                </code></pre>
-                <p>This part sets a dictionary of all 20 amino acids with a value of 0. We use <code>SeqIO</code> to parse the file and create a <code>Seq Object</code> of the sequence string. We add an option to use the <code>.translate()</code> function in Biopython just incase the fasta file the user is inputting is mRNA. We convert the sequence into a string so we can use <code>.count_amino_acids()</code> and <code>amino_acids_content()</code>.</p>
-                <p>FInally, we update the amino acid value in the dictionary to get a final count of all the different acids present in the sequence.</p>
-                <pre><code class="lang-python"><span class="hljs-title">with</span> open('<span class="hljs-type">AminoAcids</span>.json') <span class="hljs-keyword">as</span> json_file:
-                    <span class="hljs-class"><span class="hljs-keyword">data</span> = json.load(<span class="hljs-title">json_file</span>)</span>
-                
-                <span class="hljs-type">CCount</span> = <span class="hljs-number">0</span>
-                <span class="hljs-type">NCount</span> = <span class="hljs-number">0</span>
-                <span class="hljs-type">PCount</span> = <span class="hljs-number">0</span>
-                
-                <span class="hljs-title">for</span> i <span class="hljs-keyword">in</span> finalseqcount.keys():
-                    for key <span class="hljs-keyword">in</span> <span class="hljs-class"><span class="hljs-keyword">data</span>:</span>
-                        <span class="hljs-keyword">if</span> i == key <span class="hljs-keyword">in</span> <span class="hljs-class"><span class="hljs-keyword">data</span>:</span>
-                            <span class="hljs-type">CCount</span> = <span class="hljs-type">CCount</span> + (finalseqcount[i]*<span class="hljs-class"><span class="hljs-keyword">data</span>[key][0])</span>
-                            <span class="hljs-type">NCount</span> = <span class="hljs-type">NCount</span> + (finalseqcount[i]*<span class="hljs-class"><span class="hljs-keyword">data</span>[key][2])</span>
-                            <span class="hljs-type">PCount</span> = <span class="hljs-type">PCount</span> + finalseqcount[i]
-                </code></pre>
-                <p>This part gives us the Carbon, Nitrogen and Phosphorous count of the sequence. By using the <code>json</code> module, we open the <code>AminoAcids.json</code> file that contains information on the structure of each amino acid. We check to make sure the key in both dictonaries are the same and then apply the relevant operations to update our final counts.</p>
-                
+<p>I am writing this prior to this project for record keeping and to track my thoughts.</p>
+<p>Using the AASequence tool on my github along with the biopython library I need to take input from a <code>.fasta</code> file, in this case <code>DRR128265.fasta</code></p>
+<hr>
+<p>First, we need to parse the file. In order to do this we use the SeqIO function in Biopython.</p>
+<pre><code class="lang-python"><span class="hljs-keyword">from</span> Bio <span class="hljs-keyword">import</span> SeqIO 
+
+
+<span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(<span class="hljs-string">"DRR128265.fasta"</span>, <span class="hljs-string">"fasta"</span>):
+    <span class="hljs-built_in">print</span>(seq_record)
+</code></pre>
+<p>Unfortunately, for many full sized <code>.fasta</code> files there are tens of millions of lines to run through and holding that much information in memory just simply isn&#39;t realistic. The most reasonable approach would be to split one large file into several, smaller files for handling. For our file <code>DRR128265.fasta</code> we have a staggering ~92 million lines broken up into these sequence chunks. </p>
+<pre><code>&gt;DRR128265<span class="hljs-number">.1</span> <span class="hljs-number">1</span> length=<span class="hljs-number">301</span>
+CTTTCATCGTTTACTCTGGCAAAATGAATTGTAACCCTCCATTCTCCTCCTTTAACTTAT
+TTCTACTCAACTTTTTCTTCCCTTCTTCCTCCTTTTTCACATTTTTATTCTCCCCTCTCA
+TCCTCTCCACTTCCTTTTTCTTATCCTACTTCTTTCTAACTCTCATCTTCTCCTTCTTTG
+TTTTCTCAATTCTCTCCCCCCTCTTCAACACCTTCTTTCTTCCGTTTACCCCTTGTTTTT
+CTTAAGTGCACTCTTCTTCTCTCCTTTCTCTTTTTCTTTTCTCTTTTTCCTTCTTCTTCT
+T
+</code></pre><p>While I could force users to use SRA Toolkit or other programs to split the <code>.fasta</code> files into those limits while downloading, it seemed nicer to just do it for them and let them toss in a full sizes file no matter the size. This will also force a standard naming convention for the rest of the program to follow. In order to do this, we will use the method described here <a href="https://biopython.org/wiki/Split_large_file">https://biopython.org/wiki/Split_large_file</a></p>
+<pre><code class="lang-python">def batch_iterator(iterator, batch_size):...
+
+
+record_iter = SeqIO.<span class="hljs-keyword">parse</span>(<span class="hljs-keyword">open</span>(<span class="hljs-string">"DRR128265.fasta"</span>), <span class="hljs-string">"fasta"</span>)
+<span class="hljs-keyword">for</span> i, batch <span class="hljs-keyword">in</span> enumerate(batch_iterator(record_iter, 25000)):
+    filename = <span class="hljs-string">"group_%i.fasta"</span> % (i + 1)
+    with <span class="hljs-keyword">open</span>(filename, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> handle:
+        <span class="hljs-keyword">count</span> = SeqIO.write(batch, handle, <span class="hljs-string">"fasta"</span>)
+    <span class="hljs-keyword">print</span>(<span class="hljs-string">"Wrote %i records to %s"</span> % (<span class="hljs-keyword">count</span>, filename))
+</code></pre>
+<p>Copy pasting the code from the site didn&#39;t work for me, and I found after some trial and error that you can&#39;t do <code>iterator.next()</code> in the <code>batch_iterator</code> function. Instead, <code>next(iterator)</code> worked for me.</p>
+<p>I also found that for my 4GB file, doing a batch size of 1000 created like...7000 files so I changed it to 25,000 </p>
+<p>Now that we have a more managable ~300 files, we need to isolate the part we care about: the sequence.</p>
+<p>Since we have all these smaller <code>.fasta</code> files, we can more reasonably commit them to memory. My plan is to use SeqIO to parse each file, strip the sequence and append it to a list in a similar fashion to what we just did. I&#39;ll set a batch_size again to prevent the list from getting too large, write the list to a text file, and repeat until we have multiple text files. We will finally pass these text files through my program, sum each instances Nitrogen, Phosphorous and Carbon count and create a final log file of the results.</p>
+<pre><code class="lang-python"><span class="hljs-attr">ext</span> = (<span class="hljs-string">'.fasta'</span>, <span class="hljs-string">'.fna'</span>, <span class="hljs-string">'.fnn'</span>, <span class="hljs-string">'.faa'</span>, <span class="hljs-string">'.frn'</span> , <span class="hljs-string">'.fa'</span>)
+</code></pre>
+<p>FASTA files do not strictly come as <code>.fasta</code>, so I will use the <code>os</code> module to account for the common extension aliases.</p>
+<p>~~The idea is that we scan the directory for any common FASTA file extensions. The headers of these files all start with that <code>&gt;</code> character:</p>
+<blockquote>
+<p>&#39;&gt;DRR128265.1 1 length=301</p>
+</blockquote>
+<p><del>So we look for any line that contains this character, ignore it and then create a newfile without it. This will give us files without any information we don&#39;t want to pass through our tool. We add a check to ensure our original fasta file is untouched by the header stripping.</del></p>
+<p>Originally, the code looked like this:</p>
+<pre><code class="lang-python"><span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
+    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext) <span class="hljs-keyword">and</span> <span class="hljs-built_in">files</span> != filename:
+        <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>, <span class="hljs-string">"r+"</span>) <span class="hljs-keyword">as</span> oldfile, <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>, <span class="hljs-string">"r+"</span>) <span class="hljs-keyword">as</span> cleanfile:
+            <span class="hljs-keyword">lines</span> = oldfile.readlines()
+            <span class="hljs-keyword">for</span> <span class="hljs-built_in">line</span> <span class="hljs-keyword">in</span> <span class="hljs-keyword">lines</span>:
+                <span class="hljs-keyword">if</span> <span class="hljs-string">'&gt;'</span> <span class="hljs-keyword">in</span> <span class="hljs-built_in">line</span>: 
+                    pass
+                <span class="hljs-keyword">else</span>:
+                    cleanfile.<span class="hljs-built_in">write</span>(<span class="hljs-built_in">line</span>)
+                    print(<span class="hljs-string">"Succesfully removed FASTA header from"</span> + <span class="hljs-string">""</span> + str(oldfile))
+
+    <span class="hljs-keyword">else</span>:
+        pass
+</code></pre>
+<p>And this DOES work, but over the course of a huge file like an entire organism it would take way, way too long.</p>
+<p>Instead, after a while of digging I found that the <code>SeqIO.parse()</code> returns a <code>SeqRecord</code> object and I can just take that object and call the sequence itself. Since I figure SeqIO is much more optimized than my loop, it should work much faster. This could certainly be used to remove the need for the second chunk of code but as of now I can&#39;t be bothered.</p>
+<pre><code class="lang-python"><span class="hljs-keyword">for</span> <span class="hljs-built_in">files</span> <span class="hljs-keyword">in</span> os.listdir():
+    <span class="hljs-keyword">if</span> <span class="hljs-built_in">files</span>.endswith(ext):  <span class="hljs-comment">#Ensures original FASTA is safe?</span>
+        sequences = []
+        ffile = <span class="hljs-built_in">open</span>(<span class="hljs-built_in">files</span>)
+        <span class="hljs-keyword">for</span> seq_record <span class="hljs-keyword">in</span> SeqIO.parse(ffile, <span class="hljs-string">"fasta"</span>):
+            <span class="hljs-keyword">for</span> n <span class="hljs-keyword">in</span> seq_record:
+                s = seq_record.seq
+                sequences.append(SeqRecord(s, id=<span class="hljs-string">""</span>, description=<span class="hljs-string">""</span>))
+            SeqIO.<span class="hljs-built_in">write</span>(sequences, <span class="hljs-string">"testfile.fasta"</span>, <span class="hljs-string">"fasta"</span>)
+        print(<span class="hljs-string">"Stripped header from "</span> + str(<span class="hljs-built_in">files</span>))
+    <span class="hljs-keyword">else</span>:
+        pass
+</code></pre>
+<p>As of now, the main problems are as follows:</p>
+<ul>
+<li><p>I realized that there is nothing preventing the program from reading output files if they&#39;re fasta files, meaning it will indefinitely loop over the new files with their header stripped. This will result in duplicate strings and, more pressingly, an infinitely running program.</p>
+</li>
+<li><p>This still feels slow and I have a feeling that there are libraries that will do everything I want rendering my written &quot;library&quot; and this jumbled loop useless. But it&#39;s a learning experience. </p>
+</li>
+</ul>
+<hr>
+<p><strong><em>UPDATE</em></strong> </p>
+<p>I was right. I basically rendered all the above work useless lmao.</p>
+<p>This does it all, and it doesn&#39;t even need my AASequence code either.</p>
+<pre><code class="lang-python"><span class="hljs-function"><span class="hljs-title">print</span><span class="hljs-params">(<span class="hljs-string">"--------------"</span>)</span></span>
+filename = input(<span class="hljs-string">"Enter your filename (including extension). Ensure it is in the root directory."</span>)
+finalseqcount = {<span class="hljs-string">'A'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'C'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'D'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'E'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'F'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'G'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'H'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'I'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'K'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'L'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'M'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'N'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'P'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'Q'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'R'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'S'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'T'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'V'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'W'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'Y'</span>: <span class="hljs-number">0</span>}
+<span class="hljs-selector-tag">q</span> = input(<span class="hljs-string">"Is your sequence an mRNA sequence that needs translated? (y/n)"</span>) <span class="hljs-number">#Acc</span>ounts <span class="hljs-keyword">for</span> different sequence types (mRNA, DNA)
+<span class="hljs-keyword">for</span> entry <span class="hljs-keyword">in</span> SeqIO.parse(filename, <span class="hljs-string">"fasta"</span>):
+    seqstring = Seq(entry.seq) <span class="hljs-selector-id">#Grabs</span> the sequence <span class="hljs-keyword">for</span> each entry and turns it into <span class="hljs-selector-tag">a</span> Seq <span class="hljs-selector-tag">object</span>
+    <span class="hljs-keyword">if</span> <span class="hljs-selector-tag">q</span>.lower() == <span class="hljs-string">"y"</span>: 
+        seqstring = Seq(entry.seq).translate() <span class="hljs-selector-id">#Translates</span> mRNA to relevant protein sequence
+    <span class="hljs-keyword">else</span>:
+        pass <span class="hljs-selector-id">#Placeholder</span> <span class="hljs-keyword">for</span> other conversion types
+    analyzed_seq = ProteinAnalysis(str(seqstring))
+    aminoacids = analyzed_seq.count_amino_acids()
+    <span class="hljs-keyword">for</span> key <span class="hljs-keyword">in</span> finalseqcount:
+        <span class="hljs-keyword">if</span> key <span class="hljs-keyword">in</span> analyzed_seq<span class="hljs-selector-class">.amino_acids_content</span>:
+            finalseqcount[key] = finalseqcount[key] + analyzed_seq<span class="hljs-selector-class">.amino_acids_content</span>[key]
+</code></pre>
+<p>This part sets a dictionary of all 20 amino acids with a value of 0. We use <code>SeqIO</code> to parse the file and create a <code>Seq Object</code> of the sequence string. We add an option to use the <code>.translate()</code> function in Biopython just incase the fasta file the user is inputting is mRNA. We convert the sequence into a string so we can use <code>.count_amino_acids()</code> and <code>amino_acids_content()</code>.</p>
+<p>FInally, we update the amino acid value in the dictionary to get a final count of all the different acids present in the sequence.</p>
+<pre><code class="lang-python"><span class="hljs-title">with</span> open('<span class="hljs-type">AminoAcids</span>.json') <span class="hljs-keyword">as</span> json_file:
+    <span class="hljs-class"><span class="hljs-keyword">data</span> = json.load(<span class="hljs-title">json_file</span>)</span>
+
+<span class="hljs-type">CCount</span> = <span class="hljs-number">0</span>
+<span class="hljs-type">NCount</span> = <span class="hljs-number">0</span>
+<span class="hljs-type">PCount</span> = <span class="hljs-number">0</span>
+
+<span class="hljs-title">for</span> i <span class="hljs-keyword">in</span> finalseqcount.keys():
+    for key <span class="hljs-keyword">in</span> <span class="hljs-class"><span class="hljs-keyword">data</span>:</span>
+        <span class="hljs-keyword">if</span> i == key <span class="hljs-keyword">in</span> <span class="hljs-class"><span class="hljs-keyword">data</span>:</span>
+            <span class="hljs-type">CCount</span> = <span class="hljs-type">CCount</span> + (finalseqcount[i]*<span class="hljs-class"><span class="hljs-keyword">data</span>[key][0])</span>
+            <span class="hljs-type">NCount</span> = <span class="hljs-type">NCount</span> + (finalseqcount[i]*<span class="hljs-class"><span class="hljs-keyword">data</span>[key][2])</span>
+            <span class="hljs-type">PCount</span> = <span class="hljs-type">PCount</span> + finalseqcount[i]
+</code></pre>
+<p>This part gives us the Carbon, Nitrogen and Phosphorous count of the sequence. By using the <code>json</code> module, we open the <code>AminoAcids.json</code> file that contains information on the structure of each amino acid. We check to make sure the key in both dictonaries are the same and then apply the relevant operations to update our final counts.</p>
+<h2 id="update-9-16-21-">Update (9-16-21)</h2>
+<p>After some playing around, reading and time I have a program I&#39;m happy enough with (as far as the bones go. I&#39;m unsure of the accuracy and the speed needs reworking some day)</p>
+<pre><code class="lang-python"><span class="hljs-comment">#Reimpliement batch iteration -</span>
+
+<span class="hljs-function"><span class="hljs-keyword">def</span> <span class="hljs-title">batch_iterator</span><span class="hljs-params">(iterator, batch_size)</span>:</span>
+    <span class="hljs-string">"""
+    Returns multiple lists of length batch_size.
+    """</span>
+
+    entry = <span class="hljs-keyword">True</span> <span class="hljs-comment">#Ensures the loop runs once</span>
+    <span class="hljs-keyword">while</span> entry:
+        batch = []
+        <span class="hljs-keyword">while</span> len(batch) &lt; batch_size: 
+            <span class="hljs-keyword">try</span>:
+                entry = next(iterator)
+            <span class="hljs-keyword">except</span> StopIteration:
+                entry = <span class="hljs-keyword">None</span>
+            <span class="hljs-keyword">if</span> entry <span class="hljs-keyword">is</span> <span class="hljs-keyword">None</span>:
+                <span class="hljs-keyword">break</span><span class="hljs-comment">#End of file</span>
+            batch.append(entry)
+        <span class="hljs-keyword">if</span> batch:
+            <span class="hljs-keyword">yield</span> batch
+
+print(<span class="hljs-string">"--------------"</span>)
+filename = input(<span class="hljs-string">"Enter your filename(including extension). Ensure it is in the root directory."</span>) <span class="hljs-comment">#Sets target file</span>
+query = input(<span class="hljs-string">"If the file is significantly large, it is recommended that you split it. Would you like to split the file?(y/n)"</span>)
+seqtype = input(<span class="hljs-string">"Does your file need transcribed?(y/n)"</span>) <span class="hljs-comment">#Used for a check below to use SeqIO's .translate() module</span>
+
+<span class="hljs-keyword">if</span> query.lower() == <span class="hljs-string">"y"</span>: <span class="hljs-comment">#Checks if you want/need to split the file</span>
+    record_iter = SeqIO.parse(open(filename), <span class="hljs-string">"fasta"</span>) <span class="hljs-comment">#Uses SeqIO to parse the file as the iterator (subject to change to a different fasta parser)</span>
+    <span class="hljs-keyword">for</span> i, batch <span class="hljs-keyword">in</span> enumerate(batch_iterator(record_iter, <span class="hljs-number">60000</span>)):
+        file = <span class="hljs-string">"group_%i.fasta"</span> % (i + <span class="hljs-number">1</span>)
+        <span class="hljs-keyword">with</span> open(file, <span class="hljs-string">"w"</span>) <span class="hljs-keyword">as</span> handle:
+            count = SeqIO.write(batch, handle, <span class="hljs-string">"fasta"</span>)
+        print(<span class="hljs-string">"Wrote %i records to %s"</span> % (count, file))
+</code></pre>
+<p>I started by re-implementing the option to use the batch_iterator. This is only an option for those who want to do larger files on it, though I don&#39;t recomment it at this point in time. The batch size of <code>60000</code> was for a very, very large file and it took several hours.</p>
+<p>There is some flavor text for readability, and I have it handle whether the user needs their file translated or not all at the start.</p>
+<pre><code class="lang-python">#Scan directory <span class="hljs-keyword">for</span> common fasta <span class="hljs-keyword">file</span> extensions using OS module -
+ext = (<span class="hljs-string">'.fasta'</span>, <span class="hljs-string">'.fna'</span>, <span class="hljs-string">'.fnn'</span>, <span class="hljs-string">'.faa'</span>, <span class="hljs-string">'.frn'</span> , <span class="hljs-string">'.fa'</span>)
+
+PCount = <span class="hljs-number">0</span> # Phosphorous <span class="hljs-built_in">count</span> will <span class="hljs-keyword">be</span> sum of sequence length <span class="hljs-keyword">pre</span>-translation, creates variable.
+finalseqcount = {<span class="hljs-string">'A'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'C'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'D'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'E'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'F'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'G'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'H'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'I'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'K'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'L'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'M'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'N'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'P'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'Q'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'R'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'S'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'T'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'V'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'W'</span>: <span class="hljs-number">0</span>, <span class="hljs-string">'Y'</span>: <span class="hljs-number">0</span>}
+
+#Loop over <span class="hljs-keyword">all</span> <span class="hljs-keyword">files</span>, <span class="hljs-built_in">count</span> their Amino Acids <span class="hljs-built_in">and</span> create <span class="hljs-keyword">a</span> total - 
+<span class="hljs-keyword">print</span>(<span class="hljs-string">"Now parsing files. Depending on the number of files and their size, this may take a while..."</span>)
+<span class="hljs-keyword">if</span> query == <span class="hljs-string">'y'</span>:
+    <span class="hljs-keyword">for</span> <span class="hljs-keyword">files</span> in os.listdir(): #Scan <span class="hljs-keyword">for</span> <span class="hljs-keyword">all</span> <span class="hljs-keyword">files</span> (applicable <span class="hljs-keyword">only</span> <span class="hljs-keyword">if</span> <span class="hljs-keyword">files</span> are <span class="hljs-keyword">split</span>)
+        <span class="hljs-keyword">if</span> <span class="hljs-keyword">files</span>.endswith(ext):
+            <span class="hljs-keyword">if</span> <span class="hljs-keyword">files</span> != filename:
+                fileparse = SeqIO.parse(<span class="hljs-keyword">files</span>, <span class="hljs-string">"fasta"</span>) #Begins the <span class="hljs-keyword">file</span> parse. Trying <span class="hljs-keyword">to</span> keep this <span class="hljs-keyword">as</span> the <span class="hljs-keyword">only</span> parse step <span class="hljs-keyword">to</span> avoid costly time
+<span class="hljs-keyword">else</span>:
+    fileparse = SeqIO.parse(filename, <span class="hljs-string">"fasta"</span>) #If there<span class="hljs-string">'s only one file used, no need to scan directory</span>
+</code></pre>
+<p>This portion is mostly the same, though now we only scan the directory if the user decided to say <code>yes</code> to splitting the file. Otherwise, it loads the entire file into memory if they decided it was sufficiently small.</p>
+<pre><code class="lang-python"><span class="hljs-keyword">for</span> entry <span class="hljs-keyword">in</span> fileparse: <span class="hljs-comment">#Depending on if the file is large/a large series of a lot of smaller files, this can take a long time</span>
+    PCount = PCount + <span class="hljs-built_in">len</span>(str(entry.seq))
+
+    <span class="hljs-keyword">if</span> seqtype.<span class="hljs-built_in">lower</span>() == <span class="hljs-string">"y"</span>: <span class="hljs-comment"># Check for mRNA</span>
+        mRNA_translate = Seq(str(entry.seq)).translate()
+        analyzed_seq = ProteinAnalysis(str(mRNA_translate)) <span class="hljs-comment">#Allows .count_amino_acids() to apply to the files</span>
+
+    <span class="hljs-keyword">else</span>:
+        analyzed_seq = ProteinAnalysis(str(entry.seq))
+
+    aacount = analyzed_seq.count_amino_acids()
+
+    <span class="hljs-keyword">for</span> key <span class="hljs-keyword">in</span> finalseqcount:
+        <span class="hljs-keyword">if</span> key <span class="hljs-keyword">in</span> analyzed_seq.amino_acids_content: <span class="hljs-comment">#Dictionary content from .count_amino_acids()</span>
+            finalseqcount[key] = finalseqcount[key] + analyzed_seq.amino_acids_content[key]
+
+    <span class="hljs-keyword">else</span>:
+        pass
+
+print(<span class="hljs-string">"Finished."</span>)
+print(<span class="hljs-string">"\n"</span>)
+
+print(<span class="hljs-string">"Your final amino acid counts are: \n"</span>)
+print(finalseqcount)
+<span class="hljs-built_in">log</span> = input(<span class="hljs-string">"Would you like to write these to a log file?(y/n)"</span>)
+
+<span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-string">'AminoAcids.json'</span>) <span class="hljs-keyword">as</span> json_file:
+    data = json.<span class="hljs-built_in">load</span>(json_file)
+
+NCount = <span class="hljs-number">0</span>
+<span class="hljs-keyword">for</span> i <span class="hljs-keyword">in</span> finalseqcount.<span class="hljs-built_in">keys</span>():
+    <span class="hljs-keyword">for</span> key <span class="hljs-keyword">in</span> data:
+        <span class="hljs-keyword">if</span> i == key <span class="hljs-keyword">in</span> data:
+            NCount = NCount + (finalseqcount[i]*data[key][<span class="hljs-number">2</span>])
+
+<span class="hljs-keyword">if</span> <span class="hljs-built_in">log</span>.<span class="hljs-built_in">lower</span>() == <span class="hljs-string">"y"</span>:   
+    <span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-string">"results_'{}'.txt"</span>.<span class="hljs-built_in">format</span>(filename), <span class="hljs-string">"x"</span>) <span class="hljs-keyword">as</span> results: <span class="hljs-comment">#Logs results because I'm sick of waiting for console</span>
+        results.<span class="hljs-built_in">write</span>(<span class="hljs-string">"Amino acid count:\n"</span>)
+        results.<span class="hljs-built_in">write</span>(str(finalseqcount))
+        results.<span class="hljs-built_in">write</span>(<span class="hljs-string">"\n"</span>)
+        results.<span class="hljs-built_in">write</span>(<span class="hljs-string">"Phosphorous count: \n"</span>)
+        results.<span class="hljs-built_in">write</span>(str(PCount))
+        results.<span class="hljs-built_in">write</span>(<span class="hljs-string">"\n"</span>)
+        results.<span class="hljs-built_in">write</span>(<span class="hljs-string">"Nitrogen count: \n"</span>)
+        results.<span class="hljs-built_in">write</span>(str(NCount))
+</code></pre>
+<p>Finally, the script generates a dictionary of the acid counts and then allows the user to write a <code>results.txt</code> logfile for their run if they want. It takes the name of <code>results_{filename}</code> for ease of keeping track. </p>
+
             </article>
             <hr class="dingbat related" /> </main>
         <hy-drawer id="_drawer" class="" side="left" threshold="10" noscroll>
